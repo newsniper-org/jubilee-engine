@@ -1,0 +1,62 @@
+[
+  {
+    "name": "시작",
+    "type": "Go"
+  },
+  {
+    "name": "올드 켄트 로드",
+    "type": "Property",
+    "price": 60
+  },
+  {
+    "name": "소득세",
+    "type": "Tax",
+    "amount": 200
+  },
+  {
+    "name": "화이트채플 로드",
+    "type": "Property",
+    "price": 60
+  },
+  {
+    "name": "감옥으로 가시오",
+    "type": "GoToJail"
+  },
+  {
+    "name": "펜튼빌 로드",
+    "type": "Property",
+    "price": 120
+  },
+  {
+    "name": "전기 회사",
+    "type": "Utility",
+    "price": 150
+  },
+  {
+    "name": "화이트홀",
+    "type": "Property",
+    "price": 140
+  },
+  {
+    "name": "무료 주차",
+    "type": "FreeParking"
+  },
+  {
+    "name": "스트랜드",
+    "type": "Property",
+    "price": 220
+  },
+  {
+    "name": "찬스",
+    "type": "Chance"
+  },
+  {
+    "name": "피카딜리",
+    "type": "Property",
+    "price": 280
+  },
+  {
+    "name": "감옥",
+    "type": "Jail"
+  }
+]

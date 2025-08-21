@@ -1,0 +1,17 @@
+[package]
+name = "jubilee-engine"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+js-sys = "0.3.77"
+serde = { version = "1.0.219", features = ["alloc", "derive", "rc", "serde_derive"] }
+serde_json = { version = "1.0.143", features = ["alloc", "indexmap", "preserve_order"] }
+wasm-bindgen = { version = "0.2.100", features = ["serde", "serde-serialize", "serde_json"] }
+rhai = { version = "1.22.0", default-features = false, features = ["debugging", "std", "serde"] }
+
+[target.wasm32-unknown-unknown.dependencies]
+rhai = { version = "1.22.0", default-features = false, features = ["debugging", "std", "serde", "wasm-bindgen"] }
