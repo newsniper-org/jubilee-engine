@@ -3,7 +3,8 @@ import init, { GameEngine } from './pkg/jubilee_engine.js';
 async function run() {
     await init();
     const boardJson = await fetch('./board.json').then(r => r.text());
-    const gameScript = await fetch('./scripts/game.rhai').then(r => r.text());
+    const actionScript = await fetch('./scripts/action.rhai').then(r => r.text());
+    const cycleScript = await fetch('./scripts/cycle.rhai').then(r => r.text());
 
     // --- 엔진 생성 시 플레이어 수 전달 ---
     const playerCount = 2; // 우선 2명으로 시작
@@ -29,7 +30,7 @@ async function run() {
     rollDiceBtn.addEventListener('click', () => {
         const diceRoll = Math.floor(Math.random() * 6) + 1;
         try {
-            engine.run_turn_script(gameScript, BigInt(diceRoll));
+            engine.run_turn_script(actionScript, BigInt(diceRoll));
             render();
             rollDiceBtn.disabled = true; // 한 턴에 한 번만 굴리도록 비활성화
             endTurnBtn.disabled = false;
