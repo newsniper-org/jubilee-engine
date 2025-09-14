@@ -26,8 +26,9 @@ pub struct Tile {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ChanceCard {
-    pub name: String,
-    pub description: String,
+    pub title: String,
+    pub descriptoin: String,
+    pub instruction: String,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -289,6 +290,14 @@ where
 
 #[wasm_bindgen]
 impl GameEngine {
+    fn round(x: i64, n: i64) -> i64 {
+        let rem = x % n;
+        if (2 * rem) >= n {
+            x - rem + n
+        } else {
+            x - rem
+        }
+    }
 
     #[wasm_bindgen(constructor)]
     pub fn new(board_json: &str, chance_cards_json: &str, consts_json: &str, players_count: usize, initial_money: i64, salary: i64, building_cost: i64) -> Result<GameEngine, String> {
@@ -332,6 +341,11 @@ impl GameEngine {
         let state_clone = state.clone();
         engine.register_fn("get_player_count", move || -> i64 {
             state_clone.players.len() as i64
+        });
+
+        // 10만 단위 반올림을 위한 API
+        engine.register_fn("round100000", |x: i64| -> i64 {
+            Self::round(x, 100000)
         });
 
         engine.register_fn("find_next_tile_of_type", move |current_pos: u32, tile_type: String| -> u32 {
@@ -386,7 +400,6 @@ impl GameEngine {
             (name.clone(), owned_amount)
         });
         mapped_partition
-        
     }
 
 
@@ -480,6 +493,14 @@ impl GameEngine {
                 let jail_pos = self.state.board.iter().position(|t| t.tile_type == "Jail").unwrap();
                 self.state.players[player_index].position = jail_pos as u32;
                 self.state.log.push("Sent to Jail!".into());
+                self.now = GameSituation::EndTurn;
+                return Ok(()); // 이동 로직을 건너뛰기 위해 여기서 종료
+            },
+            "GoToUniversity" => {
+                let univ_pos = self.state.board.iter().position(|t| t.tile_type == "University").unwrap();
+                self.state.players[player_index].position = univ_pos as u32;
+                self.state.log.push("Sent to University!".into());
+                Self::educate(&mut self.state.players[player_index]);
                 self.now = GameSituation::EndTurn;
                 return Ok(()); // 이동 로직을 건너뛰기 위해 여기서 종료
             },
@@ -778,6 +799,7 @@ impl GameEngine {
         scope.push_constant("sum_of_all_taxes", sum_of_all_taxes);
         scope.push("money", money);
         scope.push_constant("is_graduated", if let EducationStatus::Graduated = education_status { true } else { false });
+        scope.push_constant("has_bonus", player_mut.tickets_count.bonus > 0);
 
         let result: Map = self.engine.eval_with_scope(&mut scope, script).map_err(|e| e.to_string())?;
         let new_government_income = result["new_government_income"].clone().as_int().unwrap();
@@ -905,12 +927,24 @@ impl GameEngine {
         self.now = GameSituation::PendingCheckChanceCardResponse;
     }
 
+    fn property_swap(&mut self, to_give: &String, to_get: &String) {
+        let pair = (self.state.properties[to_give].0.clone(), self.state.properties[to_get].0.clone());
+        self.state.properties.iter_mut().for_each(|(name, (owner_id,_ ))| {
+            if *name == *to_give {
+                *owner_id = pair.1;
+            } else if *name == *to_get {
+                *owner_id = pair.0;
+            }
+        });
+    }
+
     #[wasm_bindgen]
-    pub fn check_chance_card(&mut self, script_chance_action: &str, payload_json: Option<String>) -> Result<(), String> {
+    pub fn check_chance_card(&mut self, script_chance_action: &str, script_cycle: &str, payload_json: Option<String>) -> Result<(), String> {
         if let Some(cid) = &self.pending_chance_card_id {
             
             let current_turn_idx = self.state.current_turn_idx;
             let player_mut = &mut self.state.players[current_turn_idx];
+            let player_money = player_mut.money.clone();
 
             let mut scope = Scope::new();
             scope.push("card_id", cid.clone());
@@ -923,8 +957,24 @@ impl GameEngine {
             scope.push("payload", payload);
 
             let (my_properties, others_properties) = Self::get_owned_properties(&self.state.properties,player_mut.id);
+            let my_houses_countsum = my_properties.iter().filter_map(|(name, count)| {
+                let tile_type = self.state.board.iter().find_map(|tile| {
+                    if tile.name == *name {
+                        Some(tile.tile_type.clone())
+                    } else {
+                        None
+                    }
+                });
+                if let Some(tt) = tile_type && tt == "Property" {
+                    Some(*count as i64)
+                } else {
+                    None
+                }
+            }).sum::<i64>();
             scope.push("my_properties", my_properties);
+            scope.push("my_houses_countsum", my_houses_countsum);
             scope.push("others_properties", others_properties);
+            scope.push("player_money", player_money);
 
             let result: Map = self.engine.eval_with_scope(&mut scope, script_chance_action).map_err(|e| e.to_string())?;
             let action_type = result["type"].clone().into_string().unwrap();
@@ -968,6 +1018,13 @@ impl GameEngine {
                             self.now = GameSituation::EndGame;
                         }
                     }
+                },
+                "GoToUniversity" => {
+                    let univ_pos = self.state.board.iter().position(|t| t.tile_type == "University").unwrap();
+                    player_mut.position = univ_pos as u32;
+                    self.state.log.push("Sent to University!".into());
+                    Self::educate(player_mut);
+                    self.now = GameSituation::EndTurn;
                 },
                 "GetTicket" => {
                     let kind = result["kind"].clone().into_string().unwrap();
@@ -1033,6 +1090,16 @@ impl GameEngine {
                     self.state.log.push(format!("Warped to {}!", self.state.board[new_pos as usize].name));
                     self.now = GameSituation::EndTurn;
                 },
+                "TravelToPosition" => {
+                    let new_pos = result["position"].clone().as_int().unwrap() as u32;
+                    let old_pos = player_mut.position.clone();
+                    player_mut.position = new_pos;
+                    self.state.log.push(format!("Traveled to {}!", self.state.board[new_pos as usize].name));
+                    if old_pos >= new_pos {
+                        self.trigger_cycle(script_cycle)?;
+                    }
+                    self.now = GameSituation::EndTurn;
+                },
                 "DestructOnePerEach" => {
                     let raw_targets = result["targets"].clone().into_array().unwrap();
                     let processed_targets = raw_targets.iter().filter_map(|item| {
@@ -1074,6 +1141,34 @@ impl GameEngine {
                     self.now = GameSituation::EndTurn;
                 },
                 "NOP" => {
+                    self.now = GameSituation::EndTurn;
+                },
+                "GoToPayElectricityFee" => {
+                    let using_ticket = result["using_ticket"].clone().as_bool().unwrap();
+                    let (elec_pos, elec_tile) = self.state.board.iter().enumerate().find(|&(_, tile)| tile.name.as_str() == "Electricity").unwrap();
+                    player_mut.position = elec_pos as u32;
+                    self.state.log.push("Sent to Electricity!".into());
+                    
+                    if using_ticket && player_mut.tickets_count.no_tax > 0 {
+                        player_mut.tickets_count.no_tax -= 1;
+                    } else {
+                        player_mut.money -= elec_tile.amount;
+                    }
+
+                    if player_mut.money < 0 {
+                        self.prompt_financial_crisis();
+                    } else {
+                        self.now = GameSituation::EndTurn;
+                    }
+                },
+                "GraduateNow" => {
+                    player_mut.education_status = EducationStatus::Graduated;
+                    self.now = GameSituation::EndTurn;
+                },
+                "PropertySwap" => {
+                    let to_get = result["to_get"].clone().into_string().unwrap();
+                    let to_give = result["to_give"].clone().into_string().unwrap();
+                    self.property_swap(&to_give, &to_get);
                     self.now = GameSituation::EndTurn;
                 }
                 // ...
