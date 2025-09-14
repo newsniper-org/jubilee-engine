@@ -18,11 +18,11 @@ switch tile.type {
             }
         } else if is_owned && owner_id != player.id {
             if free_flag {
-                #{ type: "Log", message: Landed on property '${tile.name}' owned by Player ${owner_id}.` };
+                #{ type: "Log", message: `Landed on property '${tile.name}' owned by Player '${owner_id}'.` };
             } else if ticket_flag {
                 #{ type: "UseTicket", kind: "FreeProperty" };
             } else {
-                #{ type: "PayTo", gov_amount: tile.price, to_player_id: owner_id, player_amount: building_cost * owned_amount, message: Landed on property '${tile.name}' owned by Player ${owner_id}.` };
+                #{ type: "PayTo", gov_amount: tile.price, to_player_id: owner_id, player_amount: building_cost * owned_amount, message: `Landed on property '${tile.name}' owned by Player ${owner_id}.` };
             }
         } else if is_owned && owner_id == player.id && owned_amount >= MAX_BUILDINGS {
             if free_flag {
@@ -47,7 +47,7 @@ switch tile.type {
         }
     },
     
-    "GoToJail" => #{ type: "GoToJail" },
+    "Jail" => #{ type: "Imprison" },
 
     "PublicTransport" => {
         // 다음 대중교통 타일의 위치를 Rust에 물어봄

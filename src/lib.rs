@@ -414,6 +414,7 @@ impl GameEngine {
 
         let dices = dices.unwrap_or(DicePair(0, 0));
 
+        let old_pos = player.position.clone();
         // 이동 후 위치 계산
         let new_pos = (player.position + (dices.0 + dices.1) as u32) % self.state.board.len() as u32;
         let tile = self.state.board[new_pos as usize].clone();
@@ -435,7 +436,7 @@ impl GameEngine {
         
 
         // 한 바퀴를 채웠으면 
-        if self.state.players[player_index].position >= new_pos && dices != DicePair(0, 0) {
+        if old_pos >= new_pos && dices != DicePair(0, 0) {
             self.trigger_cycle(script_cycle)?;
         }
 
@@ -489,25 +490,14 @@ impl GameEngine {
                     self.prompt_financial_crisis();
                 }
             },
-            "GoToJail" => {
-                let jail_pos = self.state.board.iter().position(|t| t.tile_type == "Jail").unwrap();
-                self.state.players[player_index].position = jail_pos as u32;
-                self.state.log.push("Sent to Jail!".into());
+            "Imprison" => {
+                self.state.log.push("Imprisoned!".into());
                 self.now = GameSituation::EndTurn;
-                return Ok(()); // 이동 로직을 건너뛰기 위해 여기서 종료
-            },
-            "GoToUniversity" => {
-                let univ_pos = self.state.board.iter().position(|t| t.tile_type == "University").unwrap();
-                self.state.players[player_index].position = univ_pos as u32;
-                self.state.log.push("Sent to University!".into());
-                Self::educate(&mut self.state.players[player_index]);
-                self.now = GameSituation::EndTurn;
-                return Ok(()); // 이동 로직을 건너뛰기 위해 여기서 종료
             },
             "WarpToPosition" => {
-                let new_pos = result["position"].clone().as_int().unwrap() as u32;
-                self.state.players[player_index].position = new_pos;
-                self.state.log.push(format!("Warped to {}!", self.state.board[new_pos as usize].name));
+                let dest = result["position"].clone().as_int().unwrap() as u32;
+                self.state.players[player_index].position = dest;
+                self.state.log.push(format!("Warped to {}!", self.state.board[dest as usize].name));
                 self.now = GameSituation::EndTurn;
                 return Ok(()); // 이동 로직을 건너뛰기 위해 여기서 종료
             },
@@ -781,6 +771,7 @@ impl GameEngine {
         let salary = self.salary;
         let government_income = self.state.government_income;
         let player_mut = &mut self.state.players[self.state.current_turn_idx];
+        player_mut.cycles += 1;
         let money = player_mut.money;
         let education_status = player_mut.education_status.clone();
         let sum_of_all_taxes = self.state.board.iter().filter_map(|tile| {
@@ -1085,17 +1076,17 @@ impl GameEngine {
                     }
                 },
                 "WarpToPosition" => {
-                    let new_pos = result["position"].clone().as_int().unwrap() as u32;
-                    player_mut.position = new_pos;
-                    self.state.log.push(format!("Warped to {}!", self.state.board[new_pos as usize].name));
+                    let dest = result["position"].clone().as_int().unwrap() as u32;
+                    player_mut.position = dest;
+                    self.state.log.push(format!("Warped to {}!", self.state.board[dest as usize].name));
                     self.now = GameSituation::EndTurn;
                 },
                 "TravelToPosition" => {
-                    let new_pos = result["position"].clone().as_int().unwrap() as u32;
+                    let dest = result["position"].clone().as_int().unwrap() as u32;
                     let old_pos = player_mut.position.clone();
-                    player_mut.position = new_pos;
-                    self.state.log.push(format!("Traveled to {}!", self.state.board[new_pos as usize].name));
-                    if old_pos >= new_pos {
+                    player_mut.position = dest;
+                    self.state.log.push(format!("Traveled to {}!", self.state.board[dest as usize].name));
+                    if old_pos >= dest {
                         self.trigger_cycle(script_cycle)?;
                     }
                     self.now = GameSituation::EndTurn;
